@@ -1,0 +1,83 @@
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1;
+}
+
+.modal {
+    position: fixed;
+    box-shadow: 0 0 7pt rgba(0, 0, 0, 0.3);
+    background: #fff;
+    font-family: sans-serif;
+    font-size: 1em;
+    color: #333;
+    z-index: 2;
+}
+
+    .modal-title-bar {
+        display: flex;
+        align-items: center;
+        padding: 4pt 0;
+    }
+
+        p.modal-title {
+            flex-grow: 1;
+            padding: 3pt 10pt;
+            margin: 0;
+            font-weight: bold;
+            letter-spacing: -0.5pt;
+        }
+
+        .modal-close {
+            width: 100%;
+            text-align: right;
+        }
+
+            .modal-close:hover .modal-close-text, .modal-close:hover .modal-close-button {
+                color: #000;
+            }
+
+            .modal-close-text, .modal-close-button {
+                display: inline-block;
+                cursor: pointer;
+                color: #aaa;
+            }
+
+            .modal-close-text {
+                padding: 0 10pt;
+                text-transform: uppercase;
+                font-size: 10pt;
+                letter-spacing: 1pt;
+            }
+
+            .modal-close-button {
+                border: none;
+                background: none;
+                padding: 0 10pt;
+                font-size: 16pt;
+                vertical-align: middle;
+            }
+
+            /* Reduce space between close text & button when both displayed */
+            .modal-close-text + .modal-close-button {
+                margin-left: -15pt;
+            }
+
+        /* Only close items - grow container and move items to right */
+        .modal-title + .modal-close {
+            width: auto;
+            text-align: right;
+        }
+
+    .modal-content {
+        padding: 10pt;
+    }
+
+        /* Remove top padding from content when title bar is active */
+        .modal-title-bar + .modal-content {
+            padding-top: 0;
+        }
