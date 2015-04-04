@@ -22,6 +22,8 @@
         display: flex;
         align-items: center;
         padding: 4pt 0;
+        border-bottom: 1px solid #EFEFEF;
+        background-color: rgba(245, 245, 245, 0.65);
     }
 
         p.modal-title {
@@ -77,7 +79,87 @@
         padding: 10pt;
     }
 
-        /* Remove top padding from content when title bar is active */
-        .modal-title-bar + .modal-content {
-            padding-top: 0;
+        .modal-field {
+            display: block;
         }
+
+            .modal-field label {
+                display: block;
+                padding: 0 0 4pt 0;
+            }
+
+            .modal-field input[type="text"] {
+                box-sizing: border-box;
+                outline: none;
+                border: 1px solid #D5D5D5;
+                padding: 4pt 5pt;
+                font-size: 1em;
+                color: #333;
+            }
+
+    .modal-buttons {
+        padding: 10pt;
+        text-align: right;
+        border-top: 1px solid #EFEFEF;
+        background-color: rgba(245, 245, 245, 0.65);
+    }
+
+        .modal-button {
+            border: none;
+            margin: 0 5pt 0 0;
+            padding: 4pt 10pt;
+            cursor: pointer;
+            text-shadow: 1px 1px rgba(0, 0, 0, 0.3);
+            text-transform: uppercase;
+        }
+
+            .modal-button:last-child {
+                margin: 0;
+            }
+
+        .modal-button-cancel {
+            color: #5A5A5A;
+            background-color: rgb(228, 228, 228);
+            text-shadow: none;
+        }
+
+            .modal-button-cancel:hover {
+                color: #E4E4E4;
+                background-color: rgb(128, 128, 128);
+            }
+
+        .modal-button-no {
+            color: #fff;
+            background-color: rgb(237, 98, 98);
+        }
+
+            .modal-button-no:hover {
+                background-color: rgb(208, 38, 38);
+            }
+
+        .modal-button-yes {
+            color: #fff;
+            background-color: rgb(120, 190, 96);
+        }
+
+            .modal-button-yes:hover {
+                background-color: rgb(57, 152, 24);
+            }
+
+        .modal-button-submit {
+            color: #fff;
+            background-color: rgb(86, 191, 255);
+        }
+
+            .modal-button-submit:hover {
+                background-color: rgb(38, 130, 186);
+            }
+
+        .modal-button-ok, .modal-button-default {
+            color: #fff;
+            background-color: rgb(86, 191, 255);
+        }
+
+            .modal-button-ok:hover, .modal-button-default:hover {
+                background-color: rgb(38, 130, 186);
+            }

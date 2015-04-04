@@ -1,6 +1,8 @@
 'use strict';
 
 var helpers = (function () {
+    var nextIdCounter = 0;
+
     var testedTypesMapping = {
         'object': 'Object',
         'function': 'Function',
@@ -15,8 +17,16 @@ var helpers = (function () {
     };
 
     return {
-        toArray: function (value) {
+        toArray: function toArray(value) {
             return [].slice.call(value);
+        },
+
+        nextId: function () {
+            return nextIdCounter++;
+        },
+
+        runFunction: function (fn, thisContext, argumentsArray) {
+            return helpers.isFunction(fn) && fn.apply(thisContext || null, argumentsArray);
         },
 
         isObject: typeTestFunctionFactory('object'),
