@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Synchronous Queue</title>
+        <script src="js/vendor/jquery-2.1.3.min.js"></script>
+        <script src="js/synchronousQueue.js"></script>
+        <style>
+            .queues {
+                overflow: hidden;
+                width: 100%;
+                font-family: monospace;
+            }
+
+                .queue {
+                    float: left;
+                }
+
+                    .test-items-count, .took {
+                        font-weight: 700;
+                    }
+
+                    .tasks-bar {
+                        overflow: hidden;
+                        display: inline-block;
+                        height: 30px;
+                        border: 1px solid #000;
+                    }
+
+                        .task-item {
+                            float: left;
+                            height: 30px;
+                            position: relative;
+                            border-right: 1px solid #000;
+                        }
+
+                            .task-item:last-child {
+                                border-right: none;
+                            }
+
+                            .task-background {
+                                position: absolute;
+                                top: 0;
+                                left: 0;
+                                bottom: 0;
+                                background: #ccc;
+                                z-index: 1;
+                            }
+
+                            .task-description {
+                                position: absolute;
+                                top: 0;
+                                left: 0;
+                                right: 0;
+                                bottom: 0;
+                                text-align: center;
+                                z-index: 2;
+                                line-height: 30px;
+                            }
+
+                    .log {
+                        height: 300px;
+                        overflow-y: scroll;
+                    }
+        </style>
+    </head>
+    <body>
+        <div class="queues"></div>
+
+        <p>Creating & executing <span class="test-items-count"></span> tasks.</p>
+        <div class="tasks-bar"></div>
+        <p>Took: <span class="took"></span> ms.</p>
+
+        <div class="log">
+            <ul></ul>
+        </div>
+
+        <script>
+            $(function () {
+                var $queues = $('.queues');
+                var testQueuesCount = 2;
+                var i;
+
+                for (i = 0; i < testQueuesCount; i += 1) {
+                    (function () {
+                        var testItemsCount = Math.floor((Math.random() * 5) + 1);
+                        var totalValue = 0;
+                        var $tasksBar, $took, $log;
+                        var task, queue, i;
+
+                        $queues.append(
+                            $('<div>', {'class': 'queue'}).css('width', (100 / testQueuesCount) + '%').append(
+                                $('<p>').append(
+                                    'Creating & executing ',
+                                    $('<span>', {'class': 'test-items-count', text: testItemsCount}),
+                                    ' tasks.'
+                                ),
+                                $tasksBar = $('<div>', {'class': 'tasks-bar'}),
+                                $('<p>').append(
+                                    'Took: ',
+                                    $took = $('<span>', {'class': 'took', text: 0}),
+                                    ' ms.'
+                                ),
+                                $log = $('<div>', {'class': 'log'}).append(
+                                    $('<ul>')
+                                )
+                            )
+                        );
+
+                        function log(message) {
+                            $('ul', $log).append(
+                                $('<li>', {html: message})
+                            );
+                        }
+
+                        function defineTask(i) {
+                            var x = Math.floor((Math.random() * 120) + 80);
+
+                            $tasksBar.css('width', totalValue +=
+                                (testItemsCount === 1 || (testItemsCount !== 1 && i === testItemsCount - 1)) ?
+                                    x : (x + 1)
+                            );
+
+                            log('Defining task ' + i + ' (value = ' + x + ').');
+                            queue.task(task, i, x);
+                        }
+
+                        task = function (i, x, callback) {
+                            var $taskBackground;
+
+                            $tasksBar.append(
+                                $('<div>', {'class': 'task-item'}).css('width', x).append(
+                                    $taskBackground = $('<div>', {'class': 'task-background'}),
+                                    $('<div>', {'class': 'task-description', html: 'Task ' + i + ' (' + x + ')'})
+                                )
+                            );
+
+                            $taskBackground.animate({
+                                width: x
+                            }, x * 20, function () {
+                                callback({
+                                    task: i,
+                                    time: x * 20
+                                });
+                            });
+                        };
+
+                        queue = new SynchronousQueue();
+
+                        queue.whenFinished(function (results) {
+                            results = results.filter(function (item) {
+                                return item !== undefined;
+                            });
+
+                            $took.text(results.reduce(function (a, b) {
+                                return a + b.time;
+                            }, 0));
+                        });
+
+                        for (i = 1; i <= testItemsCount; i += 1) {
+                            // 1/3 probability of delaying task definition (0-5s).
+                            if (Math.floor((Math.random() * 3) + 1) === 1) {
+                                var delay = Math.floor((Math.random() * 5000) + 1);
+
+                                log('Definition of task ' + i + ' delayed by ' + delay + ' ms.');
+                                setTimeout(defineTask.bind(null, i), delay);
+                            } else {
+                                defineTask(i);
+                            }
+                        }
+                    }());
+                }
+            });
+        </script>
+    </body>
+</html>
