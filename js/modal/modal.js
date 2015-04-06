@@ -14,9 +14,6 @@
             'slide': ['slideDown', 'slideUp']
         },
 
-        // By default jQuery sets "visible" property to "block" after showing element. Overriding.
-        visibleDisplay: 'inline',
-
         'class': {
             backdrop: 'modal-backdrop',
             root: 'modal',
@@ -42,6 +39,8 @@
     var CLOSE_INITIALIZER_CLOSE_BUTTON = 1,
         CLOSE_INITIALIZER_ESC = 2,
         CLOSE_INITIALIZER_OUTSIDE_CLICK = 3;
+
+    var SKIP_REPOSITIONING = 1;
 
     // -----------------------------------------------------------------------------------------------------------------
 
@@ -70,7 +69,7 @@
 
         alert: {
             options: {
-                backdrop: false,
+                backdrop: true,
                 title: '',
                 closeButton: false,
                 closeText: ''
@@ -183,9 +182,14 @@
         // Browser window resize - reposition modals.
         $(window).on('resize', function () {
             _this.instances.forEach(function (instance) {
-                instance.reposition();
+                instance.visible && instance.reposition();
             });
         });
+
+        // @TODO: Ugly, tricky way to deal with backdrop animations lag - need to do it in some other way.
+        setTimeout(function () {
+            backdrop.update();
+        }, 2000);
 
         return this;
     };
@@ -200,7 +204,7 @@
     };
 
     ModalManager.prototype.modalFactory = function (type) {
-        var args = helpers.toArray(arguments).slice(1);
+        var args = $.makeArray(arguments).slice(1);
         var modalTypeObject = ModalTypes[type];
 
         /**
@@ -212,36 +216,23 @@
          */
         var options = $.extend.apply({}, [
                 true, 'options' in modalTypeObject && modalTypeObject.options
-            ].extend(args.filter(function (arg) {
-                return helpers.isObject(arg);
+            ].concat(args.filter(function (arg) {
+                return $.isPlainObject(arg);
             }))
         );
 
         options.type = options.type || type;
 
         // Inserting type's extraArguments to options object.
-        if ('extraArguments' in modalTypeObject) {
-            modalTypeObject.extraArguments.map(function (typeArgument, index) {
-                options[typeArgument[0]] = args.length >= index + 1 && args[index] ?
-                    args[index] : typeArgument[1];
-            });
-        }
+        'extraArguments' in modalTypeObject && modalTypeObject.extraArguments.map(function (typeArgument, index) {
+            options[typeArgument[0]] = args.length >= index + 1 && args[index] ? args[index] : typeArgument[1];
+        });
 
-        manager.instances.push(new (Modal.bind.apply(Modal, [null, options].extend(args)))());
-        backdrop.update();
-
-        return manager.instances.last();
+        return new (Modal.bind.apply(Modal, [null, options].extend(args)))();
     };
 
     ModalManager.prototype.closeModal = function (modal) {
-        var _this = this;
-
-        backdrop.toggle(false, modal, function () {
-            _this.instances.delete(_this.instances.indexOf(modal));
-            backdrop.update();
-        });
-
-        return this;
+        return this.instances.delete(this.instances.indexOf(modal)) && this;
     };
 
     ModalManager.prototype.currentModal = function () {
@@ -252,13 +243,14 @@
 
     var Backdrop = function () {
         this.$node = undefined;
+        this.visible = undefined;
 
         return this.init();
     };
 
     Backdrop.prototype.init = function () {
         this.createNode()
-            .toggle(false);
+            .update();
 
         return this;
     };
@@ -270,25 +262,40 @@
         return this;
     };
 
-    Backdrop.prototype.update = function () {
-        var modal;
+    Backdrop.prototype.update = function (callback) {
+        var currentModal = manager.currentModal();
 
-        if (modal = manager.instances.lastItemThat(function (x) { return x.visible; })) {
-            return this.toggle(modal.options.backdrop, modal);
-        }
+        var after = function (show) {
+            this.visible = show;
 
-        return this.toggle(false);
-    };
-
-    Backdrop.prototype.toggle = function (show, modal, callback) {
-        this.$node.css('z-index', (modal && modal.zIndex() - 1) || coreSettings.zIndexStart - 1);
-
-        if (!(modal && modal.toggleBackdrop(show, this.$node, callback))) {
-            this.$node.toggle(show);
-
-            if (helpers.isFunction(callback)) {
-                callback();
+            if ($.isFunction(callback)) {
+                callback.call(callback);
             }
+
+            return this;
+        };
+
+        var toggle = function (show) {
+            this.$node.css('z-index', currentModal ? currentModal.zIndex() - 1 : coreSettings.zIndexStart - 1);
+
+            if (show === this.visible) {
+                after.call(this, show);
+            } else {
+                if (currentModal) {
+                    currentModal.toggleBackdrop(show, this.$node, after.bind(this, show));
+                } else {
+                    this.$node.toggle(show);
+                    after.call(this, show);
+                }
+            }
+
+            return this;
+        };
+
+        if (currentModal) {
+            toggle.call(this, currentModal.options.backdrop);
+        } else {
+            toggle.call(this, false);
         }
 
         return this;
@@ -438,7 +445,7 @@
             backdropAnimation: 'fade',
 
             // integer - backdrop's show/hide animation duration (ms).
-            backdropAnimationDuration: 200,
+            backdropAnimationDuration: 1000,
 
             // bool - allow (true) or prevent (false) to close modal using "ESC" key.
             escapeKeyCloses: true,
@@ -502,12 +509,10 @@
              *         }
              *     }
              */
-            buttons: ['cancel', 'ok'],
+            buttons: ['ok'],
 
-            // Function to execute after closing modal (returned values is passed as first argument).
-            callback: function (result) {
-                console.log('Callback executed - response:', result);
-            }
+            // Function to execute after closing modal (returned value is passed as a first argument).
+            callback: function (result) { }
         }, options);
 
         // Contains reference to type-specific modal's functions & properties.
@@ -525,11 +530,14 @@
          *                 div (closeText)
          *                 button (closeButton)
          *         div (content)
+         *         div (buttons)
          */
         this.$root = undefined;
         this.$container = undefined;
         this.$content = undefined;
         this.$close = undefined;
+
+        this.buttons = [];
 
         // Modal's visibility state. Is modal displayed or not (hidden)?
         this.visible = undefined;
@@ -541,21 +549,21 @@
     };
 
     Modal.prototype.init = function () {
+        manager.instances.push(this);
+
         this.createBasicDOMStructure()
-            .renderTopTitleBar()
-            .renderButtons()
-            .renderContent()
-            .display(true)
-              .resize()
-              .reposition()
-            .display(this.options.show)
-            .toggle(this.options.show)
+            .createTopTitleBar()
+            .createButtons()
+            .createContent()
+            .resize()
+            .reposition()
+            .toggle(this.options.show, null, SKIP_REPOSITIONING)
             .attachEvents();
 
         return this;
     };
 
-    // Creating $root, $container & $content.
+    // $root, $container, $content
     Modal.prototype.createBasicDOMStructure = function () {
         this.$root = $('<div>', {'class': coreSettings.class.root})
             .append(
@@ -570,8 +578,7 @@
         return this;
     };
 
-    // Creating title bar with title, closeText and closeButton depending on options.
-    Modal.prototype.renderTopTitleBar = function () {
+    Modal.prototype.createTopTitleBar = function () {
         this.$container.prepend(
             this.options.closeText || this.options.closeButton || this.options.title ?
                 $('<div>', {'class': coreSettings.class.titleBar}).append(
@@ -601,13 +608,13 @@
         return this;
     };
 
-    Modal.prototype.renderButtons = function () {
-        var buttons = helpers.isArray(this.options.buttons) ?
-            this.options.buttons.map(function (button) {
-                return modalButton.create(button, null, this);
+    Modal.prototype.createButtons = function () {
+        var buttons = $.isArray(this.options.buttons) ?
+            this.options.buttons.map(function (buttonType) {
+                return modalButton.create(buttonType, null, this);
             }, this) :
-            Object.keys(this.options.buttons).map(function (button) {
-                return modalButton.create(button, this.options.buttons[button], this);
+            Object.keys(this.options.buttons).map(function (buttonType) {
+                return modalButton.create(buttonType, this.options.buttons[buttonType], this);
             }, this);
 
         this.$container.append(
@@ -623,15 +630,8 @@
         return this;
     };
 
-    Modal.prototype.renderContent = function () {
-        return this.callTypeSpecificFunction('render');
-    };
-
-    Modal.prototype.attachEvents = function () {
-        // Close modal.
-        this.$close && this.$close.on('click', this.close.bind(this, CLOSE_INITIALIZER_CLOSE_BUTTON));
-
-        return this;
+    Modal.prototype.createContent = function () {
+        return this._callTypeSpecificFunction('render');
     };
 
     Modal.prototype.resize = function () {
@@ -656,8 +656,8 @@
 
             var x = position[0];
             var y = position.length > 1 && helpers.isString(position[1]) ? position[1] : 'center';
-            var width = this.$container.outerWidth();
-            var height = this.$container.outerHeight();
+            var width = this.$root.outerWidth();
+            var height = this.$root.outerHeight();
             var result = {};
 
             // If the same values or values are from the same axis centering horizontally.
@@ -685,83 +685,108 @@
         return this;
     };
 
-    Modal.prototype.display = function (isVisible) {
-        this.$root.css('display', isVisible ? coreSettings.visibleDisplay : 'none');
-        this.visible = isVisible;
-
-        return this;
-    };
-
-    Modal.prototype.toggle = function (show, callback) {
-        var _this = this;
-        var executeCallback = function () {
-            _this.display(show);
-            helpers.runFunction(callback);
+    Modal.prototype.toggle = function (show, callback, skipRepositioning) {
+        var finish = function () {
+            this._display(show);
+            this.visible = show;
+            backdrop.update(callback);
         };
 
+        // Before show dialogue reposition it (position may changed after eg. resizing browser's window).
+        show && !skipRepositioning && this._withVisible(this.reposition);
+
         if (this.options.animate) {
+            // Top offset can be only obtained if element is visible.
+            show && this._display(true);
+
             var height = this.$root.outerHeight();
             var top = this.$root.offset().top;
 
             this.$root.css('top', show ? -height : top).animate({
                 top: show ? top : -height
-            }, show ? 400 : 200, executeCallback);
+            }, show ? 400 : 200, finish.bind(this));
         } else {
-            helpers.runFunction(executeCallback);
+            finish.call(this);
         }
 
         return this;
     };
 
-    Modal.prototype.show = function (callback) {
-        return this.toggle(true, callback);
-    };
+    Modal.prototype.attachEvents = function () {
+        this.$close && this.$close.on('click', this.close.bind(this, CLOSE_INITIALIZER_CLOSE_BUTTON));
 
-    Modal.prototype.hide = function (callback) {
-        return this.toggle(false, callback);
+        return this;
     };
 
     Modal.prototype.zIndex = function () {
         return coreSettings.zIndexStart + (this.id * 2);
     };
 
-    Modal.prototype.callTypeSpecificFunction = function (functionName) {
-        if (functionName in this.type) {
-            helpers.runFunction(this.type[functionName], this, helpers.toArray(arguments).slice(1));
+    Modal.prototype.toggleBackdrop = function (show, $backdrop, callback) {
+        if (this.options.backdropAnimation) {
+            $backdrop[coreSettings.animations[this.options.backdropAnimation][show ? 0 : 1]]
+                (this.options.backdropAnimationDuration, callback);
+        } else {
+            $backdrop.toggle(show) && ($.isFunction(callback) && callback.call(callback));
         }
 
         return this;
     };
 
-    Modal.prototype.toggleBackdrop = function (show, $backdrop, callback) {
-        if (this.options.backdropAnimation) {
-            return $backdrop[coreSettings.animations[this.options.backdropAnimation][show ? 0 : 1]]
-            (this.options.backdropAnimationDuration, callback);
-        }
-
-        return false;
-    };
-
     Modal.prototype.close = function (initializer) {
-        var _this = this;
+        if (!initializer || (initializer && this._checkCanRemove(initializer))) {
+            var afterToggle = function () {
+                this.$root.remove();
+                $.isFunction(this.options.callback) && this.options.callback.apply(this, [this.callbackResult]);
+                manager.closeModal(this);
+            };
 
-        if (!initializer || (initializer && this.checkCanRemove(initializer))) {
-            this.toggle(false, function () {
-                _this.$root.remove();
-
-                helpers.runFunction(_this.options.callback, _this, [_this.callbackResult]);
-                manager.closeModal(_this);
-            });
+            this.toggle(false, afterToggle.bind(this));
         }
 
         return this;
     };
 
     /**
+     * Utilities/methods aliases.
+     */
+
+    Modal.prototype.show = function () {
+        return this.toggle.apply(this, [true].concat($.makeArray(arguments)));
+    };
+
+    Modal.prototype.hide = function () {
+        return this.toggle.apply(this, [false].concat($.makeArray(arguments)));
+    };
+
+    Modal.prototype._callTypeSpecificFunction = function (functionName) {
+        if (functionName in this.type) {
+            this.type[functionName].apply(this, $.makeArray(arguments).slice(1));
+        }
+
+        return this;
+    };
+
+    Modal.prototype._display = function (display) {
+        return this.$root.css('display', display ? 'inline' : 'none') && this;
+    };
+
+    Modal.prototype._withVisible = function (fn) {
+        var hidden = !this.$root.is(':visible');
+        var result;
+
+        this._display(true);
+        result = fn.call(this);
+        hidden && this._display(false);
+
+        return result;
+    };
+
+    /**
      * Check if modal can be closed basing on initializer (close button, ESC key,
      * click outside modal...) and modal configuration options.
      */
-    Modal.prototype.checkCanRemove = function (initializer) {
+    Modal.prototype._checkCanRemove = function (initializer) {
         return this.visible && (
             (initializer === CLOSE_INITIALIZER_CLOSE_BUTTON) ||
             (initializer === CLOSE_INITIALIZER_ESC && this.options.escapeKeyCloses) ||
@@ -778,31 +803,46 @@
 
         publicScope.instances = manager.instances;
         publicScope.test = function () {
-            modal.prompt('Enter your name:', 'Daniel', {
-                callback: function (name) {
-                    if (!name) {
-                        modal.confirm('Ouh, you want to try again?', {
-                            callback: function (tryAgain) {
-                                if (tryAgain) {
-                                    modal.prompt('Name again:', '(your name here)', {
-                                        callback: function (name) {
-                                            if (name) {
-                                                modal.alert('Finally! Thanks, ' + name + '!');
-                                            } else {
-                                                modal.alert('I\'m sad now :(');
-                                            }
-                                        }
-                                    })
-                                } else {
-                                    modal.alert('Ok. Fuck off, then.');
-                                }
-                            }
-                        })
-                    } else {
-                        modal.alert('Hello, ' + name + '!');
-                    }
-                }
+            modal.open({content: '1', backdrop: true});
+            modal.open({content: '2', backdrop: true});
+            modal.open({content: '3', backdrop: true});
+            modal.alert('Lol', {backdrop: false});
+            modal.open({
+                backdrop: false,
+                content: 'Hello!<br>How are you?<br>This is default dialog.<br><br>' +
+                         '<strong>Code:</strong><br><span style="font-family: monospace;">' +
+                         'modal.open({<br>&nbsp;&nbsp;&nbsp;&nbsp;content: \'Content...\'<br>});'
             });
+
+            //modal.alert('Jeden', {backdrop: true});
+            //modal.alert('Dwa', {backdrop: true});
+            //modal.alert('Trzy', {backdrop: true});
+
+            //modal.prompt('Enter your name:', 'Daniel', {
+            //    callback: function (name) {
+            //        if (!name) {
+            //            modal.confirm('Ouh, you want to try again?', {
+            //                callback: function (tryAgain) {
+            //                    if (tryAgain) {
+            //                        modal.prompt('Name again:', '(your name here)', {
+            //                            callback: function (name) {
+            //                                if (name) {
+            //                                    modal.alert('Finally! Thanks, ' + name + '!');
+            //                                } else {
+            //                                    modal.alert('I\'m sad now :(');
+            //                                }
+            //                            }
+            //                        })
+            //                    } else {
+            //                        modal.alert('Ok. Fuck off, then.');
+            //                    }
+            //                }
+            //            })
+            //        } else {
+            //            modal.alert('Hello, ' + name + '!');
+            //        }
+            //    }
+            //});
         };
     });
 
